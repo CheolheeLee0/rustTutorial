@@ -86,17 +86,57 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // 환경변수에서 스프레드시트 ID 가져오기
     let spreadsheet_id = env::var("SPREADSHEET_ID")?;
-    let new_sheet_name = "new_sheet";
+    let new_sheet_name = "employee_data";
 
     // 새로운 시트 생성
     create_sheet(&spreadsheet_id, new_sheet_name).await?;
     println!("새로운 시트가 생성되었습니다: {}", new_sheet_name);
 
-    // 범위를 new_sheet로 변경
-    let range = "new_sheet!A1:B2";
+    // 범위를 새로운 데이터 크기에 맞게 조정
+    let range = "employee_data!A1:D7";
 
-    // 추가할 데이터 (String)
-    let values = vec![vec!["이름".to_string(), "점수".to_string()], vec!["홍길동".to_string(), "100".to_string()]];
+    // 헤더와 데이터 추가
+    let values = vec![
+        // 헤더
+        vec!["No".to_string(), "employee_id".to_string(), "banker_url".to_string(), "customer_url".to_string()],
+        // 데이터 행
+        vec![
+            "1".to_string(),
+            "00000001".to_string(),
+            "https://rtt-client-alpha.43.201.242.240.sslip.io/user/02/00000001?pass=00000001".to_string(),
+            "https://rtt-client-alpha.43.201.242.240.sslip.io/chat?ref=5a957ef73bfa445fadbed5859fa152f4&branch=kyungnam".to_string(),
+        ],
+        vec![
+            "2".to_string(),
+            "00000002".to_string(),
+            "https://rtt-client-alpha.43.201.242.240.sslip.io/user/02/00000002?pass=00000002".to_string(),
+            "https://rtt-client-alpha.43.201.242.240.sslip.io/chat?ref=f01775bff0f84d8aaa54ab145b26811f&branch=kyungnam".to_string(),
+        ],
+        vec![
+            "3".to_string(),
+            "0000001".to_string(),
+            "https://rtt-client-alpha.43.201.242.240.sslip.io/user/01/0000001?pass=0000001".to_string(),
+            "https://rtt-client-alpha.43.201.242.240.sslip.io/chat?ref=46066d803a454cf4a634b067929967ba&branch=busan".to_string(),
+        ],
+        vec![
+            "4".to_string(),
+            "0000002".to_string(),
+            "https://rtt-client-alpha.43.201.242.240.sslip.io/user/01/0000002?pass=0000002".to_string(),
+            "https://rtt-client-alpha.43.201.242.240.sslip.io/chat?ref=338768b69f6749129dcf563ed5ba5644&branch=busan".to_string(),
+        ],
+        vec![
+            "5".to_string(),
+            "0000003".to_string(),
+            "https://rtt-client-alpha.43.201.242.240.sslip.io/user/01/0000003?pass=0000003".to_string(),
+            "https://rtt-client-alpha.43.201.242.240.sslip.io/chat?ref=083984fd0fca457d87d21e453e1d8e7f&branch=busan".to_string(),
+        ],
+        vec![
+            "6".to_string(),
+            "0000004".to_string(),
+            "https://rtt-client-alpha.43.201.242.240.sslip.io/user/01/0000004?pass=0000004".to_string(),
+            "https://rtt-client-alpha.43.201.242.240.sslip.io/chat?ref=ed6d6bd4841e43e6b87206bb7493cbc1&branch=busan".to_string(),
+        ],
+    ];
 
     // 스프레드시트에 데이터 추가
     append_to_sheet(&spreadsheet_id, &range, values).await?;
