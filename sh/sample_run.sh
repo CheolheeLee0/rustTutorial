@@ -20,3 +20,10 @@ cargo check --release
 
 # clean
 cargo clean
+
+cargo add syn
+
+
+cargo run --bin spreadsheet
+cargo run --bin main
+
