@@ -1,3 +1,4 @@
+use chrono::Local;
 use dotenv::dotenv;
 use google_sheets4::{
     api::ValueRange,
@@ -64,12 +65,30 @@ async fn create_sheet(spreadsheet_id: &str, sheet_title: &str) -> Result<(), Box
     let auth = ServiceAccountAuthenticator::builder(secret).build().await?;
     let hub = Sheets::new(hyper::Client::builder().build(hyper_rustls::HttpsConnectorBuilder::new().with_native_roots().https_only().enable_http1().build()), auth);
 
-    // 새로운 시트 추가 요청 생성
+    // 새로운 시트 추가 요청 생성 (기본 필터 포함)
     let request = google_sheets4::api::BatchUpdateSpreadsheetRequest {
-        requests: Some(vec![google_sheets4::api::Request {
-            add_sheet: Some(google_sheets4::api::AddSheetRequest { properties: Some(google_sheets4::api::SheetProperties { title: Some(sheet_title.to_string()), ..Default::default() }) }),
-            ..Default::default()
-        }]),
+        requests: Some(vec![
+            google_sheets4::api::Request {
+                add_sheet: Some(google_sheets4::api::AddSheetRequest { properties: Some(google_sheets4::api::SheetProperties { title: Some(sheet_title.to_string()), ..Default::default() }) }),
+                ..Default::default()
+            },
+            // 필터 추가
+            google_sheets4::api::Request {
+                set_basic_filter: Some(google_sheets4::api::SetBasicFilterRequest {
+                    filter: Some(google_sheets4::api::BasicFilter {
+                        range: Some(google_sheets4::api::GridRange {
+                            sheet_id: None, // 새로 생성된 시트에 자동 적용
+                            start_row_index: Some(0),
+                            end_row_index: None,
+                            start_column_index: Some(0),
+                            end_column_index: Some(5), // A부터 E까지 (5개 컬럼)
+                        }),
+                        ..Default::default()
+                    }),
+                }),
+                ..Default::default()
+            },
+        ]),
         ..Default::default()
     };
 
@@ -79,70 +98,77 @@ async fn create_sheet(spreadsheet_id: &str, sheet_title: &str) -> Result<(), Box
     Ok(())
 }
 
+async fn create_sheet_with_headers(spreadsheet_id: &str, sheet_title: &str, headers: Vec<String>) -> Result<(), Box<dyn Error>> {
+    let key_path = env::var("GOOGLE_SERVICE_ACCOUNT_KEY")?;
+    let secret = read_service_account_key(&key_path).await?;
+    let auth = ServiceAccountAuthenticator::builder(secret).build().await?;
+    let hub = Sheets::new(hyper::Client::builder().build(hyper_rustls::HttpsConnectorBuilder::new().with_native_roots().https_only().enable_http1().build()), auth);
+
+    // 새로운 시트 추가 요청
+    let request = google_sheets4::api::BatchUpdateSpreadsheetRequest {
+        requests: Some(vec![google_sheets4::api::Request {
+            add_sheet: Some(google_sheets4::api::AddSheetRequest { properties: Some(google_sheets4::api::SheetProperties { title: Some(sheet_title.to_string()), ..Default::default() }) }),
+            ..Default::default()
+        }]),
+        ..Default::default()
+    };
+
+    // 시트 생성
+    hub.spreadsheets().batch_update(request, spreadsheet_id).doit().await?;
+
+    // 헤더 추가
+    let range = format!("{}!A1:{}", sheet_title, get_column_letter(headers.len()));
+    let values = vec![headers.iter().map(|h| json!(h)).collect::<Vec<_>>()];
+
+    let value_range = ValueRange { values: Some(values), ..Default::default() };
+
+    hub.spreadsheets().values_update(value_range, spreadsheet_id, &range).value_input_option("RAW").doit().await?;
+
+    Ok(())
+}
+
+// 열 번호를 알파벳으로 변환하는 헬퍼 함수
+fn get_column_letter(column_number: usize) -> String {
+    let mut column = String::new();
+    let mut n = column_number;
+
+    while n > 0 {
+        n -= 1;
+        let c = ((n % 26) as u8 + b'A') as char;
+        column.insert(0, c);
+        n /= 26;
+    }
+
+    column
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    // .env 파일 로드
     dotenv().ok();
-
-    // 환경변수에서 스프레드시트 ID 가져오기
     let spreadsheet_id = env::var("SPREADSHEET_ID")?;
-    let new_sheet_name = "employee_data";
+    // 프로젝트 이름 환경변수에서 가져오기
+    let project_name = env::var("PROJECT_NAME")?;
 
-    // 새로운 시트 생성
-    create_sheet(&spreadsheet_id, new_sheet_name).await?;
-    println!("새로운 시트가 생성되었습니다: {}", new_sheet_name);
+    // 1. Project Overview 시트 생성
+    let project_overview_headers =
+        vec!["Project_ID", "Project_Name", "Project_Manager", "Start_Date", "End_Date", "Project_Goal", "Budget", "Key_Stakeholders", "Status", "Description"].into_iter().map(String::from).collect();
 
-    // 범위를 새로운 데이터 크기에 맞게 조정
-    let range = "employee_data!A1:D7";
+    create_sheet_with_headers(&spreadsheet_id, &format!("Project_Overview_{}", project_name), project_overview_headers).await?;
 
-    // 헤더와 데이터 추가
-    let values = vec![
-        // 헤더
-        vec!["No".to_string(), "employee_id".to_string(), "banker_url".to_string(), "customer_url".to_string()],
-        // 데이터 행
-        vec![
-            "1".to_string(),
-            "00000001".to_string(),
-            "https://rtt-client-alpha.43.201.242.240.sslip.io/user/02/00000001?pass=00000001".to_string(),
-            "https://rtt-client-alpha.43.201.242.240.sslip.io/chat?ref=5a957ef73bfa445fadbed5859fa152f4&branch=kyungnam".to_string(),
-        ],
-        vec![
-            "2".to_string(),
-            "00000002".to_string(),
-            "https://rtt-client-alpha.43.201.242.240.sslip.io/user/02/00000002?pass=00000002".to_string(),
-            "https://rtt-client-alpha.43.201.242.240.sslip.io/chat?ref=f01775bff0f84d8aaa54ab145b26811f&branch=kyungnam".to_string(),
-        ],
-        vec![
-            "3".to_string(),
-            "0000001".to_string(),
-            "https://rtt-client-alpha.43.201.242.240.sslip.io/user/01/0000001?pass=0000001".to_string(),
-            "https://rtt-client-alpha.43.201.242.240.sslip.io/chat?ref=46066d803a454cf4a634b067929967ba&branch=busan".to_string(),
-        ],
-        vec![
-            "4".to_string(),
-            "0000002".to_string(),
-            "https://rtt-client-alpha.43.201.242.240.sslip.io/user/01/0000002?pass=0000002".to_string(),
-            "https://rtt-client-alpha.43.201.242.240.sslip.io/chat?ref=338768b69f6749129dcf563ed5ba5644&branch=busan".to_string(),
-        ],
-        vec![
-            "5".to_string(),
-            "0000003".to_string(),
-            "https://rtt-client-alpha.43.201.242.240.sslip.io/user/01/0000003?pass=0000003".to_string(),
-            "https://rtt-client-alpha.43.201.242.240.sslip.io/chat?ref=083984fd0fca457d87d21e453e1d8e7f&branch=busan".to_string(),
-        ],
-        vec![
-            "6".to_string(),
-            "0000004".to_string(),
-            "https://rtt-client-alpha.43.201.242.240.sslip.io/user/01/0000004?pass=0000004".to_string(),
-            "https://rtt-client-alpha.43.201.242.240.sslip.io/chat?ref=ed6d6bd4841e43e6b87206bb7493cbc1&branch=busan".to_string(),
-        ],
-    ];
+    // 2. Task Management 시트 생성
+    let task_management_headers =
+        vec!["Project_ID", "Task_ID", "Parent_Task_ID", "Task_Name", "Description", "Priority", "Assignee", "Accountable", "Start_Date", "End_Date", "Status"].into_iter().map(String::from).collect();
 
-    // 스프레드시트에 데이터 추가
-    append_to_sheet(&spreadsheet_id, &range, values).await?;
+    create_sheet_with_headers(&spreadsheet_id, &format!("Task_Management_{}", project_name), task_management_headers).await?;
 
-    println!("데이터가 스프레드시트에 추가되었습니다.");
+    // 3. Roles & Responsibilities 시트 생성
+    let roles_headers = vec!["Name", "Role", "Department", "Skills", "Projects", "Availability", "Email", "Slack", "Notes"].into_iter().map(String::from).collect();
+
+    create_sheet_with_headers(&spreadsheet_id, &format!("Roles_Responsibilities_{}", project_name), roles_headers).await?;
+
+    println!("스프레드시트 구조가 성공적으로 생성되었습니다.");
     println!("스프레드시트 ID: {}", spreadsheet_id);
+    println!("프로젝트 이름: {}", project_name);
 
     Ok(())
 }
